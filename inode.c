@@ -3,7 +3,7 @@
 
 static struct inode incore[MAX_SYS_OPEN_FILES] = {0};
 
-int ialloc(void){
+struct inode *ialloc(void){
 
     unsigned char inode_map[BLOCK_SIZE];
     int inode_num;
@@ -11,17 +11,33 @@ int ialloc(void){
     //read in the block
     bread(INODE_MAP_BLOCK, inode_map);
     
-    //find free, if none are free return -1
+    //find free, if none are free return NULL
     inode_num = find_free(inode_map);
     if (inode_num == -1) {
-        return -1;
+        return NULL;
     }
 
+    //get a free inode from iget
+    struct inode *incore_inode = iget(inode_num);
+    if(incore_inode == NULL){
+        return NULL;
+    }
+
+    //init inode
+    incore_inode->size = 0;
+    incore_inode->owner_id = 0;
+    incore_inode->flags = 0;
+    incore_inode->permissions = 0;
+
+    for(int i = 0; i<INODE_PTR_COUNT; i++){
+        incore_inode->block_ptr[i] = 0;
+    }
+    incore_inode->inode_num = inode_num;
     //set as allocated and write
     set_free(inode_map, inode_num, SET_ALLOCATED);    
     bwrite(INODE_MAP_BLOCK, inode_map);
-    
-    return inode_num;
+
+    return incore_inode;
 }
 
 struct inode *find_incore_free(void){
@@ -105,7 +121,6 @@ struct inode *iget(int inode_num){
     if (free_inode == NULL){
         return NULL;
     }
-
     read_inode(free_inode, inode_num);
     free_inode->ref_count = 1;
     free_inode->inode_num = inode_num;
