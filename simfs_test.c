@@ -166,32 +166,20 @@ void test_ialloc(void){
     image_open(filename, truncate);
     init_image_fd();
 
-    unsigned char block[BLOCK_SIZE];
+    //inode map is empty, inode_num of first returned inode should be zero
+    struct inode *test_node = ialloc();
+    CTEST_ASSERT(test_node->inode_num == 0, "Testing that the first returned inode has a inode_num value of zero");
 
-    //everything is zero, we can assume first bit to be allocate will be zero
-    ialloc();
-    bread(INODE_BLOCK, block);
-    int byte_num = 0 / 8;
-    int bit_num = 0 % 8;
-    int get_value = (block[byte_num] >> bit_num) & 1;
-    CTEST_ASSERT(get_value == 1, "Testing successful of ialloc");
-    // test for second run of ialloc()
-    ialloc();
-    bread(INODE_BLOCK, block);
-    byte_num = 1 / 8;
-    bit_num = 1 % 8;
-    get_value = (block[byte_num] >> bit_num) & 1;
-    CTEST_ASSERT(get_value == 1, "Testing successful of 2nd ialloc");
-
-    //test of no availible space for allocation
-    int ialloc_return_value;
-    for(int x = 0; x< BITS_PER_BYTE*BLOCK_SIZE; x++){
-        ialloc_return_value = ialloc();
-    }
-    CTEST_ASSERT(ialloc_return_value == -1, "Testing successful of ialloc on full block");
-
-
-
+    //test init values are correct
+    CTEST_ASSERT(test_node->size == 0, "Testing that the inode init value of size is correct");
+    CTEST_ASSERT(test_node->owner_id == 0, "Testing that the inode init value of owner_id is correct");   
+    CTEST_ASSERT(test_node->flags == 0, "Testing that the inode init value of flags is correct");   
+    CTEST_ASSERT(test_node->permissions == 0, "Testing that the inode init value of permissions is correct");
+    CTEST_ASSERT(test_node->ref_count == 1, "Testing that the inode init value of ref_count is correct");       
+    
+    //inode map has one inode, inode_num of second returned inode should be one
+    struct inode *test_node_two = ialloc();
+    CTEST_ASSERT(test_node_two->inode_num == 1, "Testing that the second returned inode has a inode_num value of one");
     image_close();
 }
 
@@ -296,7 +284,26 @@ void test_read_write_inode(void){
     CTEST_ASSERT(test_read_node->block_ptr[0] == 7, "Testing succefull reading and previous writing of block_ptr 0");
     CTEST_ASSERT(test_read_node->block_ptr[1] == 8, "Testing succefull reading and previous writing of block_ptr 1");
 
+    image_close();
+}
 
+void test_iget_iput(void){
+    //tests for initial and repeated iget() on same inode_num
+    struct inode *test_node = iget(120);
+    CTEST_ASSERT(test_node->ref_count == 1, "Testing sucssesful returning of an inode from iget");
+    test_node = iget(120);
+    CTEST_ASSERT(test_node->ref_count == 2, "Testing sucssesful returning of same inode from iget");
+
+    //test for iput() on test_node
+    iput(test_node);
+    CTEST_ASSERT(test_node->ref_count == 1, "Testing sucssesful returning of an inode from iput");
+
+    //test for iput on inode block that hasn't been initialized
+    struct inode *test_node_two = find_incore_free();
+    read_inode(test_node_two, 6);
+    iput(test_node_two);
+    CTEST_ASSERT(test_node_two->inode_num == 0, "Testing iput when given an inode_num that doesn't exist");
+    
 }
 
 
@@ -315,6 +322,7 @@ int main(void){
 
     test_find_incore();
     test_read_write_inode();
+    test_iget_iput();
     
     CTEST_RESULTS();
 
